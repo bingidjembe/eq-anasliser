@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Ajuste de audio</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0f17; --card:#151b27; --acc:#3aa0ff; --ok:#38c172; --warn:#f0a500; --txt:#e8edf5; --mut:#8a94a6; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Roboto, sans-serif; background:var(--bg); color:var(--txt); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .app { width:100%; max-width:520px; }
+  .screen { display:none; }
+  .screen.on { display:block; }
+  h1 { font-size:22px; margin:0 0 6px; font-weight:600; }
+  h2 { font-size:17px; margin:0 0 8px; font-weight:600; }
+  .sub { color:var(--mut); font-size:14px; line-height:1.45; margin:0 0 16px; }
+  .card { background:var(--card); border-radius:18px; padding:18px; margin-bottom:14px; text-align:center; }
+  .card.left { text-align:left; }
+  .dots { display:flex; gap:6px; justify-content:center; margin-bottom:14px; flex-wrap:wrap; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#2a3344; }
+  .dot.done { background:var(--ok); }
+  .dot.cur { background:var(--acc); }
+  .orb { width:150px; height:150px; border-radius:50%; margin:10px auto 14px; background:radial-gradient(circle, #2c6fb8 0%, #14284a 70%); display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:700; }
+  .orb.play { animation: pulse 0.9s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.08); } }
+  .status { font-size:16px; min-height:44px; margin:10px 0 6px; }
+  .level { color:var(--mut); font-size:13px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button { width:100%; font-size:17px; padding:16px; border:0; border-radius:14px; background:var(--acc); color:#fff; margin:6px 0; font-weight:600; }
+  button.ok { background:var(--ok); color:#06210f; }
+  button.sec { background:#262f40; color:var(--txt); font-weight:500; font-size:16px; }
+  button:disabled { opacity:.35; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th, td { padding:9px 4px; border-bottom:1px solid #222a39; text-align:left; }
+  th { color:var(--mut); font-weight:500; font-size:13px; }
+  .pos { color:var(--ok); font-weight:700; }
+  .neg { color:var(--warn); font-weight:700; }
+  .note { font-size:12px; color:var(--mut); line-height:1.4; }
+  .campo { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:15px; text-align:left; margin-top:14px; }
+  .campo input, .campo select { width:150px; font-size:16px; padding:10px; border-radius:10px; border:1px solid #2a3344; background:#0f1420; color:var(--txt); }
+  .toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:15px; text-align:left; }
+  .toggle input { width:22px; height:22px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Inicio -->
+  <section class="screen on" id="s-inicio">
+    <h1>Ajuste de audio</h1>
+    <p class="sub">Todas las bandas arrancan en el mismo nivel. Si escuchas el pitido, baja; si no, sube. Al final se compara cada banda contra el promedio de todas.</p>
+    <div class="card">
+      <label class="campo">
+        <span>Modo<br><span class="note">Auto: coche. Mi oído: audífonos.</span></span>
+        <select id="modo">
+          <option value="auto">Auto (coche)</option>
+          <option value="oido">Mi oído (audífonos)</option>
+        </select>
+      </label>
+      <div style="margin-top:14px;text-align:left">
+        <div class="note" style="margin-bottom:6px">Frecuencias a probar (marca las que quieras)</div>
+        <div id="lista"></div>
+        <div class="campo" style="margin-top:8px">
+          <input type="number" id="nueva" placeholder="Hz, ej. 2500" min="20" max="20000" step="1">
+          <button class="sec" id="btn-agregar" style="width:auto;padding:10px 14px;margin:0">Agregar</button>
+        </div>
+      </div>
+      <label class="campo">
+        <span>Nivel de inicio (dB)<br><span class="note">Ejemplo: 0, 12, -3</span></span>
+        <input type="number" id="inicio" value="0" step="0.5">
+      </label>
+      <label class="campo">
+        <span>Rango de tu equalizador (±dB)<br><span class="note">Déjalo vacío si no quieres límite</span></span>
+        <input type="number" id="rango-eq" value="" placeholder="ej. 4" min="0.5" max="24" step="0.5">
+      </label>
+    </div>
+    <div class="card">
+      <div id="cuenta-auto" class="note"></div>
+      <button class="sec" id="btn-borrar-auto">Borrar sesiones del auto</button>
+      <div id="cuenta-oido" class="note" style="margin-top:12px"></div>
+      <button class="sec" id="btn-borrar-oido">Borrar sesiones de audífonos</button>
+    </div>
+    <div class="card note">
+      En el auto: motor encendido, celular conectado por Bluetooth al estéreo, todas las bandas del EQ en 0 dB, volumen del estéreo a la mitad de su máximo (ej. 20 de 40) y sin tocarlo durante la prueba.<br><br>En audífonos: volumen a la mitad de su máximo también.
+    </div>
+    <button id="btn-empezar">Empezar</button>
+  </section>
+
+  <!-- Prueba -->
+  <section class="screen" id="s-prueba">
+    <div class="dots" id="dots"></div>
+    <div class="card">
+      <div class="orb" id="orb">60</div>
+      <div class="status" id="status">Escucha el pitido</div>
+      <div class="level" id="level"></div>
+    </div>
+    <div class="row">
+      <button class="ok" id="btn-si" disabled>Lo escucho</button>
+      <button class="sec" id="btn-no" disabled>No lo escucho</button>
+    </div>
+  </section>
+
+  <!-- Resultado -->
+  <section class="screen" id="s-resultado">
+    <h1 id="titulo-res">Resultado</h1>
+    <p class="sub" id="sub-res"></p>
+    <div class="card left"><table id="tabla"></table></div>
+    <div class="card left"><h2>Gráfica contra 0.0</h2><div id="grafica"></div><p class="note">Barras verdes: necesitan más nivel. Barras naranjas: se oyen de sobra. Líneas punteadas: límite de ±4 dB del EQ general.</p></div>
+    <p class="note" id="aviso"></p>
+    <div class="card left" id="pa-card" style="display:none"><h2>Sugerencia para Poweramp</h2><p class="note">Se calcula desde las bandas del EQ general y se limita al rango de Poweramp.</p><table id="tabla-pa"></table></div>
+    <div class="card left"><pre id="registro" class="note" style="white-space:pre-wrap;margin:0"></pre></div>
+    <button id="btn-copiar">Copiar tabla</button>
+    <button class="sec" id="btn-reiniciar">Volver al inicio</button>
+  </section>
+
+</div>
+
+<script>
+const BASE = [60, 230, 910, 3600, 5000, 11000, 13000, 14000, 16000, 19900];
+const TONE = 1.5, ABS_MIN = -70, ABS_MAX = 12, MAX_PASOS = 200;
+const MAX = { auto: 2, oido: 3 };
+const CLAVE = { auto: 'eq_sesiones_auto', oido: 'eq_sesiones_oido' };
+let LIM = 4, LIM_PA = 20;
+let PULSOS = 3;
+
+let ctx = null, bandas = [], resolver = null, registro = [], umbral = {}, inicioDB = 0, idxActual = 0, modo = 'auto';
+const etiqueta = f => f >= 1000 ? (f / 1000).toString().replace('.', ',') + ' kHz' : f + ' Hz';
+const etiquetaCorta = f => f >= 1000 ? (f / 1000).toString().replace('.', ',') + 'k' : f;
+
+function leer(m) {
+  try { return JSON.parse(localStorage.getItem(CLAVE[m]) || '[]'); } catch (e) { return []; }
+}
+function escribir(m, s) {
+  try { localStorage.setItem(CLAVE[m], JSON.stringify(s)); return true; } catch (e) { return false; }
+}
+function borrar(m) {
+  try { localStorage.removeItem(CLAVE[m]); } catch (e) {}
+  contar();
+}
+function promedioDe(sesiones, f) {
+  const vals = sesiones.map(s => s[f]).filter(x => x !== null && x !== undefined);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+function contar() {
+  const na = leer('auto').length, no = leer('oido').length;
+  document.getElementById('cuenta-auto').textContent = 'Sesiones del auto: ' + na + ' de ' + MAX.auto;
+  document.getElementById('cuenta-oido').textContent = 'Sesiones de audífonos: ' + no + ' de ' + MAX.oido + (no >= MAX.oido ? ' (balance listo)' : '');
+}
+
+function audio() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+// Pitido a pulsos cortos: PULSOS pulsos de 0.22 s separados por 0.18 s
+function tono(freq, dur, db) {
+  const c = audio(), t0 = c.currentTime;
+  const amp = 0.1 * Math.pow(10, db / 20);
+  const pulso = 0.22, pausa = 0.18;
+  for (let k = 0; k < PULSOS; k++) {
+    const t = t0 + k * (pulso + pausa);
+    const o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(amp, t + 0.02);
+    g.gain.setValueAtTime(amp, t + pulso - 0.02);
+    g.gain.linearRampToValueAtTime(0, t + pulso);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + pulso);
+  }
+  return new Promise(r => setTimeout(r, PULSOS * (pulso + pausa) * 1000));
+}
+
+function pantalla(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  window.scrollTo(0, 0);
+}
+
+function pintarPuntos() {
+  document.getElementById('dots').innerHTML = bandas.map((f, n) => {
+    const cls = n < idxActual ? 'done' : (n === idxActual ? 'cur' : '');
+    return `<span class="dot ${cls}"></span>`;
+  }).join('');
+}
+
+function botones(activos) {
+  document.getElementById('btn-si').disabled = !activos;
+  document.getElementById('btn-no').disabled = !activos;
+}
+
+async function presentar(f, lvl) {
+  document.getElementById('level').textContent = 'Nivel: ' + lvl + ' dB';
+  document.getElementById('orb').classList.add('play');
+  botones(false);
+  await tono(f, TONE, lvl);
+  document.getElementById('orb').classList.remove('play');
+  document.getElementById('status').textContent = '¿Lo escuchas?';
+  botones(true);
+  return new Promise(res => { resolver = res; });
+}
+
+// "sí" baja (10 dB, luego 2 dB); "no" sube hasta oírla (5 dB) o, después de un "sí", cierra el umbral.
+async function medir(f, inicio) {
+  let lvl = inicio, oyoAlguna = false, ultimoSi = null, fino = false;
+  for (let i = 0; i < MAX_PASOS; i++) {
+    const r = await presentar(f, lvl);
+    registro.push(etiquetaCorta(f) + ' · ' + lvl + ' dB · ' + (r === 'guardar' ? 'guardar' : (r ? 'si' : 'no')));
+    if (r === 'guardar') return lvl;
+    if (r === true) {
+      oyoAlguna = true; ultimoSi = lvl;
+      if (lvl === ABS_MIN) return lvl;
+      lvl = Math.max(ABS_MIN, lvl - (fino ? 2 : 10));
+    } else {
+      if (!oyoAlguna) { lvl += 5; if (lvl > ABS_MAX) return null; continue; }
+      if (fino) return lvl;
+      fino = true; lvl = ultimoSi - 2;
+    }
+  }
+  return null;
+}
+
+async function correr() {
+  registro = [];
+  umbral = {};
+  for (idxActual = 0; idxActual < bandas.length; idxActual++) {
+    const f = bandas[idxActual];
+    pintarPuntos();
+    document.getElementById('orb').textContent = etiquetaCorta(f);
+    document.getElementById('status').textContent = etiqueta(f);
+    umbral[f] = await medir(f, inicioDB);
+  }
+  botones(false);
+  mostrarResultado();
+}
+
+function celda(d) {
+  if (d === null || d === undefined) return '<span class="note">sin dato</span>';
+  const txt = (d > 0 ? '+' : '') + d.toFixed(1) + ' dB';
+  return `<span class="${d > 0 ? 'pos' : (d < 0 ? 'neg' : '')}">${txt}</span>`;
+}
+
+function mostrarResultado() {
+  pantalla('s-resultado');
+  leerRangos();
+  const validos = bandas.map(f => umbral[f]).filter(v => v !== null);
+  const prom = validos.length ? validos.reduce((a, b) => a + b, 0) / validos.length : 0;
+  const diffs = {};
+  bandas.forEach(f => { diffs[f] = umbral[f] === null ? null : umbral[f] - prom; });
+
+  const previas = leer(modo);
+  let aviso = '';
+  let guardadas = previas;
+  if (previas.length < MAX[modo]) {
+    guardadas = previas.concat([diffs]);
+    if (!escribir(modo, guardadas)) aviso = 'No se pudo guardar la sesión en este navegador.';
+  } else {
+    aviso = 'Ya hay ' + MAX[modo] + ' sesiones guardadas; esta no se guardó. Bórralas en el inicio para repetir.';
+  }
+  contar();
+
+  const texto = [];
+  let html, sub, titulo;
+
+  if (modo === 'oido') {
+    titulo = 'Resultado · audífonos';
+    sub = 'Balance de tus oídos: cuánto necesita cada banda frente al promedio. Estos valores se restan después a las pruebas del auto.';
+    html = '<tr><th>Banda</th><th>Esta sesión</th><th>Balance (' + guardadas.length + ' de ' + MAX.oido + ')</th></tr>';
+    bandas.forEach(f => {
+      const bal = promedioDe(guardadas, f);
+      html += `<tr><td>${etiqueta(f)}</td><td>${celda(diffs[f])}</td><td>${celda(bal)}</td></tr>`;
+      texto.push(etiqueta(f) + ': ' + (bal === null ? 'sin dato' : bal.toFixed(1) + ' dB'));
+    });
+  } else {
+    titulo = 'Resultado · auto';
+    sub = 'Ajuste para el EQ general: promedio de las sesiones del auto, ' + (LIM === null ? 'sin límite' : 'limitado a ±' + LIM + ' dB') + '. Es independiente de la prueba de audífonos.';
+    const autoProm = bandas.map(f => promedioDe(guardadas, f));
+    html = '<tr><th>Banda</th><th>Auto (' + guardadas.length + ' de ' + MAX.auto + ')</th><th>Ajuste EQ</th></tr>';
+    bandas.forEach((f, i) => {
+      const a = autoProm[i];
+      let ajusteTxt = '<span class="note">sin dato</span>';
+      if (a !== null) {
+        const r = Math.round(a);
+        const s = LIM === null ? r : Math.max(-LIM, Math.min(LIM, r));
+        const tope = s !== r ? ' (tope)' : '';
+        ajusteTxt = `<span class="${s > 0 ? 'pos' : (s < 0 ? 'neg' : '')}">${s > 0 ? '+' : ''}${s}${tope}</span>`;
+        texto.push(etiqueta(f) + ': ' + (s > 0 ? '+' : '') + s);
+      } else {
+        texto.push(etiqueta(f) + ': sin dato');
+      }
+      html += `<tr><td>${etiqueta(f)}</td><td>${celda(a)}</td><td>${ajusteTxt}</td></tr>`;
+    });
+  }
+
+  dibujarGrafica(bandas.map(f => ({ f, v: promedioDe(guardadas, f) })));
+  dibujarPoweramp(modo === 'auto', guardadas);
+  document.getElementById('titulo-res').textContent = titulo;
+  document.getElementById('sub-res').textContent = sub;
+  document.getElementById('tabla').innerHTML = html;
+  document.getElementById('aviso').textContent = aviso;
+  document.getElementById('registro').textContent = registro.join('\n');
+  window._resultado = texto.join('\n');
+}
+
+// Gráfica de barras: cada banda contra la línea de 0.0 (promedio de las sesiones guardadas, sin limitar)
+function dibujarGrafica(datos) {
+  const W = 480, H = 240, pad = 40, n = datos.length;
+  const validos = datos.filter(x => x.v !== null);
+  const maxAbs = Math.max(6, ...validos.map(x => Math.abs(x.v)));
+  const y0 = H / 2 - 8;
+  const esc = (y0 - 18) / maxAbs;
+  const bw = (W - pad - 8) / n;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Gráfica contra 0.0">`;
+  [LIM, -LIM].forEach(l => {
+    const y = y0 - l * esc;
+    s += `<line x1="${pad}" x2="${W - 4}" y1="${y}" y2="${y}" stroke="#2a3344" stroke-dasharray="4 4"/>`;
+    s += `<text x="2" y="${y + 4}" font-size="11" fill="#8a94a6">${l > 0 ? '+' : ''}${l}</text>`;
+  });
+  s += `<line x1="${pad}" x2="${W - 4}" y1="${y0}" y2="${y0}" stroke="#8a94a6" stroke-width="1.5"/>`;
+  s += `<text x="2" y="${y0 + 4}" font-size="11" fill="#e8edf5">0.0</text>`;
+  datos.forEach((x, i) => {
+    const cx = pad + bw * i + bw / 2;
+    s += `<text x="${cx}" y="${H - 4}" font-size="10" fill="#8a94a6" text-anchor="middle">${etiquetaCorta(x.f)}</text>`;
+    if (x.v === null) return;
+    const h = x.v * esc;
+    const color = x.v > 0 ? '#38c172' : '#f0a500';
+    const y = h >= 0 ? y0 - h : y0;
+    s += `<rect x="${cx - bw * 0.3}" y="${y}" width="${bw * 0.6}" height="${Math.abs(h)}" fill="${color}"/>`;
+    const ty = h >= 0 ? y0 - h - 4 : y0 + Math.abs(h) + 12;
+    s += `<text x="${cx}" y="${ty}" font-size="10" fill="#e8edf5" text-anchor="middle">${(x.v > 0 ? '+' : '') + x.v.toFixed(1)}</text>`;
+  });
+  s += '</svg>';
+  document.getElementById('grafica').innerHTML = s;
+}
+
+// Lee el rango del equalizador que pone cada persona; si el campo está vacío, no se limita.
+// Ese mismo rango se usa para el EQ general y para la sugerencia de Poweramp.
+function leerRangos() {
+  const g = parseFloat(document.getElementById('rango-eq').value);
+  LIM = isNaN(g) || g <= 0 ? null : g;
+  LIM_PA = LIM;
+}
+
+// Sugerencia para Poweramp: cada banda de Poweramp toma el promedio de las bandas del EQ general más cercanas
+function dibujarPoweramp(esAuto, sesiones) {
+  const card = document.getElementById('pa-card');
+  if (!esAuto) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const g = f => promedioDe(sesiones, f);
+  const pm = (...fs) => {
+    const v = fs.map(g).filter(x => x !== null);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const PA = [
+    [31, null], [62, pm(60)], [125, pm(60, 230)], [250, pm(230)], [500, pm(230, 910)],
+    [1000, pm(910)], [2000, pm(910, 3600)], [4000, pm(3600)], [8000, pm(5000, 11000)], [16000, pm(13000, 14000)]
+  ];
+  let html = '<tr><th>Banda</th><th>Referencia</th><th>Sugerido (' + (LIM_PA === null ? 'sin límite' : '±' + LIM_PA) + ')</th></tr>';
+  PA.forEach(([f, v]) => {
+    if (v === null) {
+      html += `<tr><td>${etiqueta(f)}</td><td class="note">no medido</td><td class="note">0</td></tr>`;
+      return;
+    }
+    const r = Math.round(v * 2) / 2;
+    const s = LIM_PA === null ? r : Math.max(-LIM_PA, Math.min(LIM_PA, r));
+    const tope = s !== r ? ' (tope)' : '';
+    html += `<tr><td>${etiqueta(f)}</td><td>${celda(v)}</td><td class="${s > 0 ? 'pos' : (s < 0 ? 'neg' : '')}">${s > 0 ? '+' : ''}${s}${tope}</td></tr>`;
+  });
+  document.getElementById('tabla-pa').innerHTML = html;
+}
+
+// Lista de frecuencias: las estándar más las que agregue cada persona; se guarda en el celular
+const CLAVE_FREC = 'eq_frecuencias';
+function leerFrecs() {
+  try {
+    const s = JSON.parse(localStorage.getItem(CLAVE_FREC) || 'null');
+    if (Array.isArray(s)) return s;
+  } catch (e) {}
+  return BASE.map(f => ({ f, on: f < 16000 }));
+}
+function guardarFrecs(l) {
+  try { localStorage.setItem(CLAVE_FREC, JSON.stringify(l)); } catch (e) {}
+}
+function pintarLista() {
+  const l = leerFrecs().sort((a, b) => a.f - b.f);
+  document.getElementById('lista').innerHTML = l.map(x =>
+    `<label class="toggle" style="margin:6px 0"><span>${etiqueta(x.f)}</span><input type="checkbox" data-f="${x.f}" ${x.on ? 'checked' : ''}></label>`
+  ).join('');
+  document.querySelectorAll('#lista input').forEach(inp => {
+    inp.onchange = () => {
+      const f = Number(inp.dataset.f);
+      guardarFrecs(leerFrecs().map(y => y.f === f ? { f, on: inp.checked } : y));
+    };
+  });
+}
+function frecuenciasMarcadas() {
+  return leerFrecs().filter(x => x.on).map(x => x.f).sort((a, b) => a - b);
+}
+document.getElementById('btn-agregar').onclick = () => {
+  const f = Math.round(parseFloat(document.getElementById('nueva').value));
+  if (!(f >= 20 && f <= 20000)) { alert('Escribe una frecuencia entre 20 y 20000 Hz'); return; }
+  const l = leerFrecs();
+  const ya = l.find(x => x.f === f);
+  if (ya) ya.on = true; else l.push({ f, on: true });
+  guardarFrecs(l);
+  document.getElementById('nueva').value = '';
+  pintarLista();
+};
+
+function responder(v) {
+  if (!resolver) return;
+  const r = resolver;
+  resolver = null;
+  botones(false);
+  r(v);
+}
+
+document.getElementById('btn-empezar').onclick = () => {
+  audio();
+  modo = document.getElementById('modo').value;
+  const entrada = parseFloat(document.getElementById('inicio').value);
+  inicioDB = isNaN(entrada) ? 0 : entrada;
+  bandas = frecuenciasMarcadas();
+  pantalla('s-prueba');
+  correr();
+};
+document.getElementById('btn-si').onclick = () => responder(true);
+document.getElementById('btn-no').onclick = () => responder(false);
+document.getElementById('orb').onclick = () => {
+  if (!document.getElementById('btn-si').disabled) responder('guardar');
+};
+document.getElementById('btn-borrar-auto').onclick = () => borrar('auto');
+document.getElementById('btn-borrar-oido').onclick = () => borrar('oido');
+document.getElementById('btn-copiar').onclick = async () => {
+  try { await navigator.clipboard.writeText(window._resultado); alert('Tabla copiada'); }
+  catch (e) { alert(window._resultado); }
+};
+document.getElementById('btn-reiniciar').onclick = () => { contar(); pantalla('s-inicio'); };
+contar();
+pintarLista();
+</script>
+</body>
+</html>
